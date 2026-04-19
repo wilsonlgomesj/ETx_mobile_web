@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EcoFlow — Mockup Voz</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green-deep:   #0D1F0F;
+    --green-dark:   #142917;
+    --green-card:   #1C3520;
+    --green-mid:    #2E7D32;
+    --green-bright: #4CAF50;
+    --green-glow:   #66BB6A;
+    --green-light:  #A5D6A7;
+    --amber:        #FFA726;
+    --text-primary: #E8F5E9;
+    --text-muted:   #81A784;
+    --text-dim:     #4A6B4D;
+    --border:       rgba(76,175,80,.18);
+    --card-shadow:  0 4px 24px rgba(0,0,0,.45);
+  }
+
+  body {
+    background: #0A1A0C;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    padding: 32px 16px 64px;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-primary);
+  }
+
+  /* noise overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ---------- PAGE HEADER ---------- */
+  .page-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--green-bright);
+    margin-bottom: 6px;
+    position: relative; z-index: 1;
+  }
+  .page-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+    position: relative; z-index: 1;
+  }
+
+  /* ---------- TOGGLE ---------- */
+  .toggle-wrap {
+    display: flex;
+    gap: 0;
+    background: var(--green-dark);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+    margin-bottom: 28px;
+    position: relative; z-index: 1;
+  }
+  .toggle-btn {
+    padding: 8px 20px;
+    border-radius: 7px;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .25s ease;
+    color: var(--text-muted);
+    background: transparent;
+  }
+  .toggle-btn.active {
+    background: var(--green-mid);
+    color: #fff;
+    box-shadow: 0 2px 12px rgba(46,125,50,.5);
+  }
+
+  /* ---------- PHONE FRAME ---------- */
+  .phone {
+    width: 375px;
+    min-height: 780px;
+    background: var(--green-deep);
+    border-radius: 44px;
+    border: 1.5px solid rgba(76,175,80,.25);
+    box-shadow:
+      0 0 0 6px #0D1F0F,
+      0 0 0 7px rgba(76,175,80,.1),
+      0 32px 80px rgba(0,0,0,.7),
+      inset 0 1px 0 rgba(255,255,255,.04);
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* notch */
+  .phone::before {
+    content: '';
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 32px;
+    background: #000;
+    border-radius: 0 0 20px 20px;
+    z-index: 100;
+  }
+
+  /* ---------- SCREEN ---------- */
+  .screen {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+  }
+  .screen.visible { display: flex; }
+
+  /* STATUS BAR */
+  .status-bar {
+    padding: 38px 24px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .status-icons { display: flex; gap: 6px; align-items: center; }
+  .battery {
+    width: 20px; height: 10px;
+    border: 1.5px solid var(--text-muted);
+    border-radius: 2px;
+    position: relative;
+    display: flex; align-items: center; padding: 1.5px;
+  }
+  .battery::after {
+    content: '';
+    position: absolute; right: -5px; top: 2px;
+    width: 3px; height: 6px;
+    background: var(--text-muted);
+    border-radius: 0 1px 1px 0;
+  }
+  .battery-fill { width: 65%; height: 100%; background: var(--green-bright); border-radius: 1px; }
+
+  /* APP HEADER */
+  .app-header {
+    padding: 10px 20px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .back-btn {
+    width: 34px; height: 34px;
+    background: var(--green-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .back-icon { width: 16px; height: 16px; fill: none; stroke: var(--green-bright); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .header-info { flex: 1; }
+  .header-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+  .header-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .dot-status {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    display: inline-block;
+  }
+
+  /* VOICE START BUTTON */
+  .voice-start-btn {
+    margin: 14px 20px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, var(--green-mid), #1B5E20);
+    border: 1px solid rgba(76,175,80,.4);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(46,125,50,.4), inset 0 1px 0 rgba(255,255,255,.08);
+    transition: all .2s;
+  }
+  .voice-start-btn:active { transform: scale(.98); }
+  .mic-big-icon {
+    width: 36px; height: 36px;
+    background: rgba(76,175,80,.2);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .voice-btn-text { flex: 1; }
+  .voice-btn-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    color: #fff;
+  }
+  .voice-btn-sub { font-size: 11px; color: var(--green-light); margin-top: 1px; }
+  .arrow-icon { color: var(--green-glow); font-size: 16px; }
+
+  /* SCROLL AREA */
+  .scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px 24px;
+    scrollbar-width: none;
+  }
+  .scroll-area::-webkit-scrollbar { display: none; }
+
+  /* SECTION */
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 18px 0 10px;
+  }
+
+  /* PARAM CARD */
+  .param-card {
+    background: var(--green-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 11px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 7px;
+    transition: border-color .2s;
+  }
+  .param-card.filled { border-color: rgba(76,175,80,.45); }
+  .param-info { flex: 1; min-width: 0; }
+  .param-label { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
+  .param-input {
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: none;
+    border: none;
+    outline: none;
+    width: 100%;
+    padding: 0;
+  }
+  .param-input::placeholder { color: var(--text-dim); font-size: 13px; font-family: 'DM Sans', sans-serif; }
+  .param-unit {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .mic-field-btn {
+    width: 30px; height: 30px;
+    background: rgba(76,175,80,.1);
+    border: 1px solid rgba(76,175,80,.25);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0;
+    font-size: 13px;
+    transition: all .2s;
+  }
+  .mic-field-btn:hover { background: rgba(76,175,80,.2); }
+  .check-icon {
+    width: 26px; height: 26px;
+    background: rgba(76,175,80,.15);
+    border: 1px solid rgba(76,175,80,.4);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    color: var(--green-bright);
+    font-size: 13px;
+  }
+
+  /* OBSERVATIONS */
+  .obs-card {
+    background: var(--green-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 7px;
+  }
+  .obs-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .obs-label { font-size: 11px; color: var(--text-muted); }
+  .mic-obs-btn {
+    padding: 6px 12px;
+    background: rgba(76,175,80,.12);
+    border: 1px solid rgba(76,175,80,.3);
+    border-radius: 8px;
+    font-size: 11px;
+    color: var(--green-bright);
+    cursor: pointer;
+    display: flex; align-items: center; gap: 5px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+  }
+  .obs-textarea {
+    width: 100%;
+    min-height: 70px;
+    background: none;
+    border: none;
+    outline: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--text-primary);
+    resize: none;
+    line-height: 1.6;
+  }
+  .obs-textarea::placeholder { color: var(--text-dim); }
+
+  /* BOTTOM NAV STUB */
+  .bottom-stub {
+    padding: 14px 20px 28px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 10px;
+  }
+  .btn-secondary {
+    flex: 1; padding: 13px;
+    background: var(--green-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-family: 'Syne', sans-serif;
+    font-size: 12px; font-weight: 700;
+    color: var(--text-muted);
+    cursor: pointer; text-align: center;
+  }
+  .btn-primary {
+    flex: 2; padding: 13px;
+    background: linear-gradient(135deg, var(--green-mid), #1B5E20);
+    border: none;
+    border-radius: 12px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px; font-weight: 700;
+    color: #fff;
+    cursor: pointer; text-align: center;
+    box-shadow: 0 4px 16px rgba(46,125,50,.35);
+  }
+
+  /* ============================================================
+     STATE 2 — GUIDED VOICE SESSION
+  ============================================================ */
+  #screen-voice .scroll-area { position: relative; }
+
+  .voice-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10,26,12,.92);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 20px;
+    z-index: 50;
+  }
+
+  /* badge */
+  .voice-badge {
+    display: flex; align-items: center; gap: 7px;
+    background: rgba(76,175,80,.12);
+    border: 1px solid rgba(76,175,80,.3);
+    border-radius: 100px;
+    padding: 5px 14px;
+    margin-bottom: 24px;
+  }
+  .pulse-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green-bright);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(76,175,80,.5); }
+    50% { opacity: .8; transform: scale(1.15); box-shadow: 0 0 0 6px rgba(76,175,80,0); }
+  }
+  .badge-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--green-bright);
+  }
+
+  /* field prompt */
+  .field-prompt {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 26px;
+    color: var(--text-primary);
+    text-align: center;
+    margin-bottom: 6px;
+    letter-spacing: -.01em;
+  }
+  .field-unit-hint {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 28px;
+  }
+
+  /* waveform */
+  .waveform {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 56px;
+    margin-bottom: 28px;
+  }
+  .wave-bar {
+    width: 4px;
+    background: var(--green-bright);
+    border-radius: 3px;
+    animation: wave 1s ease-in-out infinite;
+    opacity: .85;
+  }
+  .wave-bar:nth-child(1)  { animation-delay: 0s;    }
+  .wave-bar:nth-child(2)  { animation-delay: .08s;  }
+  .wave-bar:nth-child(3)  { animation-delay: .16s;  }
+  .wave-bar:nth-child(4)  { animation-delay: .24s;  }
+  .wave-bar:nth-child(5)  { animation-delay: .32s;  }
+  .wave-bar:nth-child(6)  { animation-delay: .40s;  }
+  .wave-bar:nth-child(7)  { animation-delay: .48s;  }
+  .wave-bar:nth-child(8)  { animation-delay: .56s;  }
+  .wave-bar:nth-child(9)  { animation-delay: .64s;  }
+  .wave-bar:nth-child(10) { animation-delay: .72s;  }
+  .wave-bar:nth-child(11) { animation-delay: .80s;  }
+  .wave-bar:nth-child(12) { animation-delay: .88s;  }
+  .wave-bar:nth-child(13) { animation-delay: .96s;  }
+  .wave-bar:nth-child(14) { animation-delay: .06s;  }
+  .wave-bar:nth-child(15) { animation-delay: .18s;  }
+  @keyframes wave {
+    0%,100% { height: 8px; opacity: .4; }
+    50%      { height: 48px; opacity: 1; }
+  }
+
+  /* recognized value */
+  .recognized-wrap {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .recognized-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    font-family: 'DM Mono', monospace;
+  }
+  .recognized-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 48px;
+    font-weight: 500;
+    color: var(--green-bright);
+    line-height: 1;
+    letter-spacing: -.02em;
+    animation: fadeUp .35s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .recognized-unit {
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* action buttons */
+  .voice-actions {
+    display: flex; gap: 10px; width: 100%; margin-bottom: 20px;
+  }
+  .btn-confirm {
+    flex: 3; padding: 14px;
+    background: linear-gradient(135deg, var(--green-mid), #1B5E20);
+    border: none; border-radius: 14px;
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px;
+    color: #fff; cursor: pointer;
+    box-shadow: 0 4px 20px rgba(46,125,50,.45);
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+  }
+  .btn-redo {
+    flex: 2; padding: 14px;
+    background: transparent;
+    border: 1.5px solid rgba(76,175,80,.35);
+    border-radius: 14px;
+    font-family: 'Syne', sans-serif; font-weight: 600; font-size: 13px;
+    color: var(--green-light); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+
+  /* next hint */
+  .next-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .next-hint span { color: var(--text-muted); }
+
+  /* progress */
+  .voice-progress {
+    width: 100%;
+    margin-bottom: 20px;
+  }
+  .progress-track {
+    height: 3px;
+    background: rgba(76,175,80,.15);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 25%;
+    background: linear-gradient(90deg, var(--green-mid), var(--green-bright));
+    border-radius: 2px;
+    transition: width .4s ease;
+  }
+  .progress-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+    letter-spacing: .06em;
+  }
+
+  /* close voice */
+  .voice-close-btn {
+    padding: 9px 20px;
+    background: transparent;
+    border: 1px solid rgba(255,100,100,.2);
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: rgba(255,130,130,.7);
+    cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    transition: all .2s;
+  }
+  .voice-close-btn:hover { border-color: rgba(255,100,100,.4); color: rgba(255,130,130,1); }
+
+  /* dimmed params in voice screen */
+  .param-card.dimmed { opacity: .35; pointer-events: none; }
+  .param-card.active-voice {
+    border-color: rgba(76,175,80,.6);
+    box-shadow: 0 0 0 1px rgba(76,175,80,.2), 0 4px 16px rgba(76,175,80,.1);
+  }
+
+  /* comparison label */
+  .compare-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .12em;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">EcoFlow — Mockup de Voz</div>
+<div class="page-sub">Alterne entre os estados para visualizar o fluxo</div>
+
+<div class="toggle-wrap">
+  <button class="toggle-btn active" onclick="showScreen('normal')">Estado 1 — Normal</button>
+  <button class="toggle-btn" onclick="showScreen('voice')">Estado 2 — Sessão de Voz</button>
+</div>
+
+<!-- ============================
+     PHONE FRAME
+============================= -->
+<div class="phone">
+
+  <!-- ── STATE 1: NORMAL SCREEN ── -->
+  <div class="screen visible" id="screen-normal">
+
+    <div class="status-bar">
+      <span>09:42</span>
+      <div class="status-icons">
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="none">
+          <rect x="0" y="4" width="3" height="7" rx="1" fill="#81A784"/>
+          <rect x="4" y="2.5" width="3" height="8.5" rx="1" fill="#81A784"/>
+          <rect x="8" y="1" width="3" height="10" rx="1" fill="#4CAF50"/>
+          <rect x="12" y="0" width="3" height="11" rx="1" fill="#4CAF50"/>
+        </svg>
+        <div class="battery"><div class="battery-fill"></div></div>
+      </div>
+    </div>
+
+    <div class="app-header">
+      <div class="back-btn">
+        <svg class="back-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </div>
+      <div class="header-info">
+        <div class="header-title">Ponto P-03 · Rio Paraíba</div>
+        <div class="header-sub">
+          <span class="dot-status"></span>
+          Em progresso · Campanha BASF-0425
+        </div>
+      </div>
+    </div>
+
+    <!-- Voice start button -->
+    <button class="voice-start-btn" onclick="showScreen('voice')">
+      <div class="mic-big-icon">🎤</div>
+      <div class="voice-btn-text">
+        <div class="voice-btn-title">Iniciar Coleta por Voz</div>
+        <div class="voice-btn-sub">Preenche os 8 parâmetros em sequência</div>
+      </div>
+      <div class="arrow-icon">›</div>
+    </button>
+
+    <div class="scroll-area">
+
+      <div class="section-label">Parâmetros Coletados</div>
+
+      <!-- pH — filled -->
+      <div class="param-card filled">
+        <div class="param-info">
+          <div class="param-label">pH</div>
+          <input class="param-input" value="7.2" readonly>
+        </div>
+        <div class="param-unit">adm</div>
+        <div class="check-icon">✓</div>
+      </div>
+
+      <!-- Temperatura -->
+      <div class="param-card">
+        <div class="param-info">
+          <div class="param-label">Temperatura</div>
+          <input class="param-input" placeholder="—" readonly>
+        </div>
+        <div class="param-unit">°C</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+
+      <!-- Condutividade -->
+      <div class="param-card">
+        <div class="param-info">
+          <div class="param-label">Condutividade</div>
+          <input class="param-input" placeholder="—" readonly>
+        </div>
+        <div class="param-unit">µS/cm</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+
+      <!-- OD -->
+      <div class="param-card">
+        <div class="param-info">
+          <div class="param-label">OD — Oxigênio Dissolvido</div>
+          <input class="param-input" placeholder="—" readonly>
+        </div>
+        <div class="param-unit">mg/L</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+
+      <!-- ORP -->
+      <div class="param-card">
+        <div class="param-info">
+          <div class="param-label">ORP</div>
+          <input class="param-input" placeholder="—" readonly>
+        </div>
+        <div class="param-unit">mV</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+
+      <!-- Turbidez -->
+      <div class="param-card">
+        <div class="param-info">
+          <div class="param-label">Turbidez</div>
+          <input class="param-input" placeholder="—" readonly>
+        </div>
+        <div class="param-unit">NTU</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+
+      <!-- Nível hídrico -->
+      <div class="param-card">
+        <div class="param-info">
+          <div class="param-label">Nível hídrico (pré)</div>
+          <input class="param-input" placeholder="—" readonly>
+        </div>
+        <div class="param-unit">m</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+
+      <!-- Condut. estabilizada -->
+      <div class="param-card">
+        <div class="param-info">
+          <div class="param-label">Condut. estabilizada (pré)</div>
+          <input class="param-input" placeholder="—" readonly>
+        </div>
+        <div class="param-unit">µS/cm</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+
+      <div class="section-label">Observações</div>
+
+      <div class="obs-card">
+        <div class="obs-header">
+          <div class="obs-label">Observações gerais</div>
+          <button class="mic-obs-btn">🎤 Ditar</button>
+        </div>
+        <textarea class="obs-textarea" placeholder="Descreva condições do ponto, anomalias visuais, odores..."></textarea>
+      </div>
+
+    </div><!-- /scroll -->
+
+    <div class="bottom-stub">
+      <button class="btn-secondary">NC</button>
+      <button class="btn-primary">Confirmar Coleta →</button>
+    </div>
+
+  </div><!-- /screen-normal -->
+
+
+  <!-- ── STATE 2: GUIDED VOICE SESSION ── -->
+  <div class="screen" id="screen-voice">
+
+    <div class="status-bar">
+      <span>09:43</span>
+      <div class="status-icons">
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="none">
+          <rect x="0" y="4" width="3" height="7" rx="1" fill="#81A784"/>
+          <rect x="4" y="2.5" width="3" height="8.5" rx="1" fill="#81A784"/>
+          <rect x="8" y="1" width="3" height="10" rx="1" fill="#4CAF50"/>
+          <rect x="12" y="0" width="3" height="11" rx="1" fill="#4CAF50"/>
+        </svg>
+        <div class="battery"><div class="battery-fill"></div></div>
+      </div>
+    </div>
+
+    <div class="app-header">
+      <div class="back-btn">
+        <svg class="back-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </div>
+      <div class="header-info">
+        <div class="header-title">Ponto P-03 · Rio Paraíba</div>
+        <div class="header-sub">
+          <span class="dot-status" style="background:var(--green-bright)"></span>
+          Modo Voz ativo · Campanha BASF-0425
+        </div>
+      </div>
+    </div>
+
+    <div class="scroll-area" style="position:relative">
+
+      <!-- dimmed params -->
+      <div class="section-label" style="opacity:.35">Parâmetros Coletados</div>
+
+      <div class="param-card filled dimmed">
+        <div class="param-info">
+          <div class="param-label">pH</div>
+          <input class="param-input" value="7.2" readonly>
+        </div>
+        <div class="param-unit">adm</div>
+        <div class="check-icon">✓</div>
+      </div>
+
+      <div class="param-card active-voice dimmed">
+        <div class="param-info">
+          <div class="param-label">Temperatura</div>
+          <input class="param-input" value="24.5" readonly style="color:var(--green-bright)">
+        </div>
+        <div class="param-unit">°C</div>
+        <div class="mic-field-btn" style="border-color:rgba(76,175,80,.6);background:rgba(76,175,80,.2)">🎤</div>
+      </div>
+
+      <div class="param-card dimmed">
+        <div class="param-info"><div class="param-label">Condutividade</div><input class="param-input" placeholder="—" readonly></div>
+        <div class="param-unit">µS/cm</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+      <div class="param-card dimmed">
+        <div class="param-info"><div class="param-label">OD</div><input class="param-input" placeholder="—" readonly></div>
+        <div class="param-unit">mg/L</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+      <div class="param-card dimmed">
+        <div class="param-info"><div class="param-label">ORP</div><input class="param-input" placeholder="—" readonly></div>
+        <div class="param-unit">mV</div>
+        <div class="mic-field-btn">🎤</div>
+      </div>
+
+      <!-- VOICE OVERLAY -->
+      <div class="voice-overlay">
+
+        <div class="voice-badge">
+          <div class="pulse-dot"></div>
+          <span class="badge-text">Modo Voz Ativo</span>
+        </div>
+
+        <div class="field-prompt">Temperatura (°C)?</div>
+        <div class="field-unit-hint">Diga o valor · ex: "vinte e quatro vírgula cinco"</div>
+
+        <div class="waveform">
+          <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        </div>
+
+        <div class="recognized-wrap">
+          <div class="recognized-label">Reconhecido</div>
+          <div class="recognized-value">24.5</div>
+          <div class="recognized-unit">°C</div>
+        </div>
+
+        <div class="voice-actions">
+          <button class="btn-confirm">✓ Confirmar</button>
+          <button class="btn-redo">↺ Refazer</button>
+        </div>
+
+        <div class="next-hint">Próximo: <span>Condutividade (µS/cm)</span></div>
+
+        <div class="voice-progress">
+          <div class="progress-track">
+            <div class="progress-fill"></div>
+          </div>
+          <div class="progress-text">2 de 8 parâmetros</div>
+        </div>
+
+        <button class="voice-close-btn" onclick="showScreen('normal')">✕ Encerrar modo voz</button>
+
+      </div><!-- /voice-overlay -->
+
+    </div><!-- /scroll -->
+
+    <div class="bottom-stub" style="opacity:.35;pointer-events:none">
+      <button class="btn-secondary">NC</button>
+      <button class="btn-primary">Confirmar Coleta →</button>
+    </div>
+
+  </div><!-- /screen-voice -->
+
+</div><!-- /phone -->
+
+<script>
+  function showScreen(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+    document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+
+    if (name === 'normal') {
+      document.getElementById('screen-normal').classList.add('visible');
+      document.querySelectorAll('.toggle-btn')[0].classList.add('active');
+    } else {
+      document.getElementById('screen-voice').classList.add('visible');
+      document.querySelectorAll('.toggle-btn')[1].classList.add('active');
+    }
+  }
+</script>
+</body>
+</html>
