@@ -1,6 +1,6 @@
 import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_config.dart';
 import 'api_exceptions.dart';
@@ -8,8 +8,10 @@ import 'api_exceptions.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTH SERVICE
 // Handles login, token persistence, refresh, and current user state.
-// Tokens live in SharedPreferences (OK for MVP; migrate to flutter_secure_storage
-// in a hardening pass).
+//
+// v2: tokens are stored in flutter_secure_storage (iOS Keychain / Android
+// Keystore) instead of SharedPreferences. Non-sensitive fields (userId, email,
+// etc.) are stored alongside the tokens in the same encrypted entry.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AuthSession {
@@ -65,30 +67,35 @@ class AuthService {
   AuthService._();
   static final instance = AuthService._();
 
-  static const _prefsKey = 'ecoflow.auth_session';
+  // iOS: kCFKeychainItemAttrAccessibleAfterFirstUnlockThisDeviceOnly (default)
+  // Android: AES-256 encrypted in EncryptedSharedPreferences (API 23+),
+  //          falls back to RSA-wrapped AES on older devices.
+  static const _secure = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+  static const _sessionKey = 'ecoflow.v2.auth_session';
 
   AuthSession? _session;
   AuthSession? get session => _session;
 
   bool get isAuthenticated => _session != null && !_session!.isExpired;
 
-  /// Reads a previously persisted session from disk. Call once at boot.
+  /// Reads a previously persisted session from secure storage. Call once at boot.
   Future<AuthSession?> restore() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefsKey);
-    if (raw == null) return null;
     try {
+      final raw = await _secure.read(key: _sessionKey);
+      if (raw == null) return null;
       _session = AuthSession.fromJson(jsonDecode(raw) as Map<String, dynamic>);
       return _session;
     } catch (_) {
-      await prefs.remove(_prefsKey);
+      await _secure.delete(key: _sessionKey);
       return null;
     }
   }
 
   Future<void> _persist(AuthSession session) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, jsonEncode(session.toJson()));
+    await _secure.write(key: _sessionKey, value: jsonEncode(session.toJson()));
   }
 
   /// POST /auth/login. Stores and returns the new session.
@@ -174,8 +181,7 @@ class AuthService {
 
   Future<void> logout() async {
     _session = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_prefsKey);
+    await _secure.delete(key: _sessionKey);
   }
 
   static String _extractErrorMessage(String body) {
