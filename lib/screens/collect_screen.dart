@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
 
 import 'package:flutter/material.dart';
@@ -152,6 +153,10 @@ class _CollectScreenState extends State<CollectScreen> {
   }
 
   Future<void> _captureGps() async {
+    if (kIsWeb) {
+      showToast(context, '⚠ GPS não disponível nesta plataforma');
+      return;
+    }
     setState(() => _gpsCapturing = true);
     try {
       // Check / request permission.
