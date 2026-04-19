@@ -167,20 +167,37 @@ class SyncService {
     }
   }
 
+  /// Pulls server-driven changes using cursor-based pagination.
+  /// Loops until the server returns fewer items than [ApiConfig.pullPageSize],
+  /// signalling the last page.
   Future<void> pullUpdates({DateTime? since}) async {
     if (!isOnline.value) return;
     if (!AuthService.instance.isAuthenticated) return;
 
     state.value = state.value.copyWith(phase: SyncPhase.pulling, clearError: true);
     try {
-      final query = <String, String>{};
-      if (since != null) query['since'] = since.toUtc().toIso8601String();
+      String? cursor;
+      while (true) {
+        final query = <String, String>{
+          'limit': ApiConfig.pullPageSize.toString(),
+        };
+        if (since != null) query['since'] = since.toUtc().toIso8601String();
+        if (cursor != null) query['cursor'] = cursor;
 
-      final res = await ApiClient.instance.get(ApiConfig.syncPull, query: query);
-      final items = (res['items'] as List?) ?? const [];
-      for (final item in items) {
-        await _applyServerItem(item as Map<String, dynamic>);
+        final res = await ApiClient.instance.get(ApiConfig.syncPull, query: query);
+        final items = (res['items'] as List?) ?? const [];
+
+        for (final item in items) {
+          await _applyServerItem(item as Map<String, dynamic>);
+        }
+
+        // Server signals last page either by returning fewer items than
+        // requested, or by omitting / nulling the next_cursor field.
+        final nextCursor = res['next_cursor'] as String?;
+        if (nextCursor == null || items.length < ApiConfig.pullPageSize) break;
+        cursor = nextCursor;
       }
+
       state.value = state.value.copyWith(
         phase: SyncPhase.idle,
         lastSuccessAt: DateTime.now(),

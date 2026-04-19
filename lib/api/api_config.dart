@@ -31,8 +31,10 @@ class ApiConfig {
   static const Duration receiveTimeout = Duration(seconds: 60);
 
   /// Limites de batch — o backend tem limite de 5MB ou 100 itens.
-  /// Mantemos folga conservadora.
   static const int maxBatchItems = 80;
+
+  /// Número máximo de itens por página no pull (cursor-based).
+  static const int pullPageSize = 50;
   static const int maxBatchBytes = 4 * 1024 * 1024; // 4MB
 
   /// Intervalos de sync automático.
