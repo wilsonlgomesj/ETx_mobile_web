@@ -451,34 +451,130 @@ class SyncService {
   // ── PULL → LOCAL ──────────────────────────────────────────────────────────
 
   Future<void> _applyServerItem(Map<String, dynamic> item) async {
-    final entity = item['entity'] as String?;
+    final entity  = item['entity'] as String?;
     final payload = item['payload'] as Map<String, dynamic>? ?? {};
+    final extId   = item['external_id'] as String?;
+    final serverVersion = payload['server_version'] as int? ?? 1;
 
     switch (entity) {
       case 'mobile_campaign':
       case 'task_campaign_assignment':
         final row = <String, dynamic>{
-          'code':         payload['code'] ?? '',
-          'name':         payload['name'] ?? payload['project_name'] ?? '',
-          'client':       payload['client_name'] ?? payload['client'] ?? '',
-          'responsible':  payload['assigned_to_name'] ?? '',
-          'deadline':     payload['deadline'] ?? '',
-          'totalPoints':  (payload['expected_points'] as List?)?.length ?? 0,
-          'donePoints':   0,
-          'status':       'nova',
-          'external_id':  item['external_id'],
-          'server_version': payload['server_version'] ?? 1,
-          'id':           item['external_id'], // use external_id as local id for server-seeded campaigns
+          'code':           payload['code'] ?? '',
+          'name':           payload['name'] ?? payload['project_name'] ?? '',
+          'client':         payload['client_name'] ?? payload['client'] ?? '',
+          'responsible':    payload['assigned_to_name'] ?? '',
+          'deadline':       payload['deadline'] ?? '',
+          'totalPoints':    (payload['expected_points'] as List?)?.length ?? 0,
+          'donePoints':     0,
+          'status':         'nova',
+          'external_id':    extId,
+          'server_version': serverVersion,
+          'id':             extId,
         };
         await DatabaseHelper.instance.upsertCampaignFromServer(row);
         break;
+
       case 'campaign_cancelled':
-        // TODO: mark local campaign as cancelled. For MVP we log and ignore.
-        debugPrint('Campaign cancelled on server: ${item['external_id']}');
+        if (extId != null) {
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            DatabaseHelper.tCampaigns,
+            {'status': 'cancelada', 'dirty': 0, 'server_version': serverVersion},
+            where: 'external_id = ?',
+            whereArgs: [extId],
+          );
+        }
         break;
+
+      case 'collection_point':
+        // Reconcile a server-side point into the local field_points table.
+        // Only applies when the local row is NOT dirty (i.e., no unsent edits).
+        if (extId == null) break;
+        await _reconcilePoint(extId, payload, serverVersion);
+        break;
+
+      case 'collection_record':
+        // Mark the associated point as done if the server says the record is
+        // confirmed — useful after another device collected the same point.
+        if (extId == null) break;
+        await _reconcileRecord(extId, payload, serverVersion);
+        break;
+
       default:
-        debugPrint('Unknown pull entity: $entity');
+        debugPrint('[SyncService] Unknown pull entity: $entity');
     }
+  }
+
+  Future<void> _reconcilePoint(
+    String pointExternalId,
+    Map<String, dynamic> payload,
+    int serverVersion,
+  ) async {
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.query(
+      DatabaseHelper.tFieldPoints,
+      where: 'external_id = ?',
+      whereArgs: [pointExternalId],
+    );
+    if (rows.isEmpty) return; // point not known locally — ignore
+
+    final local = rows.first;
+    final localDirty = (local['dirty'] as int? ?? 0) == 1;
+    final localVer   = local['server_version'] as int? ?? 0;
+
+    // Server-wins only when server has newer version and local has no unsent edits.
+    if (localDirty || serverVersion <= localVer) return;
+
+    final patch = <String, dynamic>{
+      'server_version': serverVersion,
+      'last_synced_at': DateTime.now().toIso8601String(),
+      'dirty': 0,
+    };
+    if (payload['status']  != null) patch['status']  = payload['status'];
+    if (payload['gps_lat'] != null) patch['gpsLat']  = payload['gps_lat'];
+    if (payload['gps_lng'] != null) patch['gpsLng']  = payload['gps_lng'];
+
+    await db.update(
+      DatabaseHelper.tFieldPoints,
+      patch,
+      where: 'external_id = ?',
+      whereArgs: [pointExternalId],
+    );
+  }
+
+  Future<void> _reconcileRecord(
+    String recordExternalId,
+    Map<String, dynamic> payload,
+    int serverVersion,
+  ) async {
+    // If the record is confirmed on server, mark the point as done locally.
+    final recordStatus = payload['status'] as String?;
+    if (recordStatus != 'confirmed' && recordStatus != 'done') return;
+
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.query(
+      DatabaseHelper.tFieldPoints,
+      where: 'record_external_id = ?',
+      whereArgs: [recordExternalId],
+    );
+    if (rows.isEmpty) return;
+
+    final local = rows.first;
+    final localDirty = (local['dirty'] as int? ?? 0) == 1;
+    if (localDirty) return; // preserve unsent local edits
+
+    await db.update(
+      DatabaseHelper.tFieldPoints,
+      {
+        'status':           'done',
+        'server_version':   serverVersion,
+        'last_synced_at':   DateTime.now().toIso8601String(),
+        'dirty':            0,
+      },
+      where: 'record_external_id = ?',
+      whereArgs: [recordExternalId],
+    );
   }
 
   // ── COUNTS + LOG ──────────────────────────────────────────────────────────
