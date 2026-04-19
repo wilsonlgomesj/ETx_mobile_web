@@ -10,6 +10,8 @@ import 'profile_screen.dart';
 import 'new_camp_screen.dart';
 import 'notifications_screen.dart';
 import 'os_detail_screen.dart';
+import '../sync/sync_queue.dart';
+import '../sync/sync_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -122,6 +124,50 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ]),
               ),
+
+            // Sync-failed banner — shown when quarantined items exist
+            ValueListenableBuilder<SyncState>(
+              valueListenable: SyncService.instance.state,
+              builder: (context, syncState, _) {
+                if (syncState.failedCount == 0) return const SizedBox.shrink();
+                return Container(
+                  margin: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0x14E53935),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0x40E53935)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.sync_problem, size: 18, color: Color(0xFFE53935)),
+                    const SizedBox(width: 10),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(
+                        '${syncState.failedCount} item(s) não puderam ser enviados',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFE53935)),
+                      ),
+                      const Text('Máximo de tentativas atingido', style: TextStyle(fontSize: 10, color: AppColors.sub)),
+                    ])),
+                    GestureDetector(
+                      onTap: () async {
+                        await SyncQueue.instance.retryFailed(reset: true);
+                        await SyncService.instance.syncNow();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(color: const Color(0x22E53935), borderRadius: BorderRadius.circular(20)),
+                        child: const Text('Tentar', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFE53935))),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => Navigator.pushNamed(context, '/sync-diagnostics'),
+                      child: const Icon(Icons.chevron_right, size: 18, color: AppColors.sub),
+                    ),
+                  ]),
+                );
+              },
+            ),
 
             // CTA
             Padding(

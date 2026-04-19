@@ -15,15 +15,19 @@ dependencies:
   path: ^1.9.0
   # ── Backend integration ────────────────────────────────────────
   http: ^1.2.1                 # HTTP client for the REST API
-  shared_preferences: ^2.2.3   # auth session + device_id persistence
+  shared_preferences: ^2.2.3        # device_id persistence (non-sensitive)
+  flutter_secure_storage: ^9.2.4    # JWT + refresh-token storage (Keychain/Keystore)
   uuid: ^4.4.0                 # generate stable external_ids
   crypto: ^3.0.3               # SHA-256 for payload idempotency hash
   connectivity_plus: ^6.0.3    # online/offline detection for sync
+  image_picker: ^1.1.2         # camera / gallery access for photo evidence
+  geolocator: ^13.0.2          # GPS coordinates for field points
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  sqflite_common_ffi: ^2.3.4+1  # in-memory SQLite for unit tests
 
 flutter:
   uses-material-design: true

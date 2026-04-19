@@ -85,8 +85,8 @@ class SyncMappers {
                                DateTime.now().toUtc().toIso8601String(),
       'technician_external_id': technicianExternalId,
       'technician_name':        technicianName,
-      'weather':              null, // TODO: enriquecer via ClimateOptions quando expostos
-      'checklist_pop':        null, // idem — vem da UI do finish_screen
+      'weather':       _decodeOrNull(localRow['weather_conditions_json']),
+      'checklist_pop': _decodeOrNull(localRow['checklist_pop_json']),
       'physchem_params':      _decodeOrNull(localRow['final_parameter_values_json']),
       'stabilization_readings':
           _decodeOrNull(localRow['stabilization_summary_json']),
@@ -97,11 +97,12 @@ class SyncMappers {
               'motive':   localRow['ncMotive'],
             }
           : null,
-      'chain_of_custody': null, // evoluível
+      'chain_of_custody': null,
       'qaqc_summary': {
         'stabilization_status': localRow['stabilization_status'],
       },
-      'observations':         null,
+      'obs_tags':      _decodeOrNull(localRow['obs_tags_json']),
+      'observations':  localRow['observations_text'],
       'signature_image_url':  null,
       'closed_at':            localRow['stabilization_completed_at'],
       'point_status':         _pointStatusToWire(status, localRow),

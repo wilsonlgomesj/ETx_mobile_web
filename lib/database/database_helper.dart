@@ -4,7 +4,7 @@ import '../models.dart';
 
 class DatabaseHelper {
   static const _dbName    = 'ecoflow.db';
-  static const _dbVersion = 3; // v3: sync_queue, external_ids, evidences
+  static const _dbVersion = 4; // v4: collection metadata (weather, checklist, observations)
 
   static const tCampaigns      = 'campaigns';
   static const tFieldPoints    = 'field_points';
@@ -81,6 +81,10 @@ class DatabaseHelper {
         server_version                  INTEGER DEFAULT 0,
         last_synced_at                  TEXT,
         dirty                           INTEGER NOT NULL DEFAULT 0,
+        weather_conditions_json         TEXT,
+        checklist_pop_json              TEXT,
+        obs_tags_json                   TEXT,
+        observations_text               TEXT,
         FOREIGN KEY (campaignId) REFERENCES $tCampaigns(id),
         UNIQUE(campaignId, code)
       )
@@ -240,6 +244,15 @@ class DatabaseHelper {
 
       // Create new tables
       await _createSyncTables(db);
+    }
+
+    if (oldVersion < 4) {
+      // Add collection metadata columns to field_points
+      const alter = 'ALTER TABLE $tFieldPoints ADD COLUMN';
+      await db.execute("$alter weather_conditions_json TEXT");
+      await db.execute("$alter checklist_pop_json      TEXT");
+      await db.execute("$alter obs_tags_json           TEXT");
+      await db.execute("$alter observations_text       TEXT");
     }
   }
 
@@ -445,6 +458,33 @@ class DatabaseHelper {
   }
 
   // ─────────────────────────────────────────────
+  // COLLECTION METADATA — clima, checklist POP, observações
+  // ─────────────────────────────────────────────
+
+  Future<void> saveCollectionMeta({
+    required String campaignId,
+    required String pointCode,
+    required String weatherConditionsJson,
+    required String checklistPopJson,
+    required String obsTagsJson,
+    required String observationsText,
+  }) async {
+    final db = await database;
+    await db.update(
+      tFieldPoints,
+      {
+        'weather_conditions_json': weatherConditionsJson,
+        'checklist_pop_json':      checklistPopJson,
+        'obs_tags_json':           obsTagsJson,
+        'observations_text':       observationsText,
+        'dirty':                   1,
+      },
+      where: 'campaignId = ? AND code = ?',
+      whereArgs: [campaignId, pointCode],
+    );
+  }
+
+  // ─────────────────────────────────────────────
   // SYNC HELPERS — reading external_ids and dirty flags
   // ─────────────────────────────────────────────
 
@@ -505,7 +545,7 @@ class DatabaseHelper {
           where: 'campaignId = ? AND code = ?',
           whereArgs: [campaignId, code]);
     }
-    return (pointExternalId: pointExt!, recordExternalId: recordExt!);
+    return (pointExternalId: pointExt, recordExternalId: recordExt);
   }
 
   /// Returns a campaign row with sync metadata (raw map).
@@ -596,6 +636,29 @@ class DatabaseHelper {
         whereArgs: [externalId],
       );
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // SYNC LOG — leitura para tela de diagnósticos
+  // ─────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getRecentSyncLogs({int limit = 30}) async {
+    final db = await database;
+    return db.query(
+      tSyncLog,
+      orderBy: 'started_at DESC',
+      limit: limit,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getFailedQueueItems({int limit = 50}) async {
+    final db = await database;
+    return db.query(
+      tSyncQueue,
+      where: "status = 'failed'",
+      orderBy: 'updated_at DESC',
+      limit: limit,
+    );
   }
 
   // ─────────────────────────────────────────────

@@ -41,20 +41,22 @@ todo sem rede), e o backend recebe as mudanças em lotes quando há conexão.
 |---|---|---|
 | Config | `lib/api/api_config.dart` | URL base, endpoints, limites de batch, timeouts |
 | HTTP | `lib/api/api_client.dart` | Wrapper sobre `package:http` com auth + refresh + erros tipados |
-| Auth | `lib/api/auth_service.dart` | Login, logout, persistência e refresh de sessão |
+| Auth | `lib/api/auth_service.dart` | Login, logout, persistência segura (Keychain/Keystore) e refresh de sessão |
 | Erros | `lib/api/api_exceptions.dart` | Network / Unauthorized / Conflict / Validation / UpgradeRequired |
 | Mappers | `lib/api/sync_mappers.dart` | Conversores local ↔ payloads da API |
 | Device | `lib/sync/device_info.dart` | `device_id` persistente por instalação |
 | Fila | `lib/sync/sync_queue.dart` | Persistência de operações pendentes em SQLite |
 | Orquestração | `lib/sync/sync_service.dart` | Push/pull em batches, monitoramento de conectividade |
 | Upload | `lib/sync/evidence_uploader.dart` | Upload de fotos em 3 etapas via URL pré-assinada |
+| Câmera | `lib/sync/photo_capture_service.dart` | Wrapper sobre `image_picker` com limites de qualidade/dimensão |
 | UI | `lib/screens/login_screen.dart` | Tela de login com validação e tratamento de erros |
+| UI | `lib/screens/sync_diagnostics_screen.dart` | Histórico de sync e retry de itens quarentenados |
 
 ### Alterações em arquivos existentes
 
 | Arquivo | Alteração |
 |---|---|
-| `pubspec.yaml` | `http`, `shared_preferences`, `uuid`, `crypto`, `connectivity_plus` |
+| `pubspec.yaml` | `http`, `shared_preferences`, `flutter_secure_storage`, `image_picker`, `uuid`, `crypto`, `connectivity_plus` |
 | `lib/database/database_helper.dart` | Migração v2→v3: colunas `external_id`, `server_version`, `dirty`; novas tabelas `sync_queue`, `collection_evidences`, `sync_log`; helpers de sync |
 | `lib/app_state.dart` | `init()` restaura sessão + liga `SyncService`; cada mutação enfileira no sync; `logout()` real |
 | `lib/main.dart` | `AuthGate` que decide entre `LoginScreen` e `HomeScreen` |
@@ -298,9 +300,10 @@ login e ser usado nas chamadas. Hoje o `AuthService` já extrai o campo
 do response de login (se o backend enviar); verifique que a API inclui
 `user.technician_external_id` no JSON de `/auth/login`.
 
-**Autenticação biométrica e secure storage:** `SharedPreferences` é OK para
-MVP, mas produção deve usar `flutter_secure_storage` para o JWT e
-suporte opcional a biometria antes de destravar o app.
+**Autenticação biométrica:** os tokens já são gravados no iOS Keychain /
+Android Keystore via `flutter_secure_storage` (v2). O próximo passo é
+adicionar suporte opcional a biometria (Face ID / impressão digital) antes
+de destravar o app, usando `local_auth`.
 
 ---
 
@@ -334,17 +337,29 @@ remote_url, attempts, last_error
 
 ---
 
-## 8. Próximos passos sugeridos (em ordem de ROI)
+## 8. O que mudou na v2
 
-1. **Captura real de fotos com `image_picker`** e integração com
-   `EvidenceUploader` no `collect_screen`.
-2. **Tela de diagnóstico de sync** acessível via menu do perfil.
-3. **Estruturar clima, checklist POP e cadeia de custódia** na UI e
-   pipeline de payload.
-4. **Trocar `SharedPreferences` por `flutter_secure_storage`** para o JWT.
-5. **Testes de integração** contra um backend mockado (dockerizar o
-   backend NestJS pra ter ambiente reproduzível).
-6. **Implementar a fila de revisão de conflitos** como tela admin.
+| Feature | Arquivo(s) | Detalhe |
+|---|---|---|
+| **JWT no Keychain/Keystore** | `auth_service.dart` | `flutter_secure_storage` com `AndroidOptions(encryptedSharedPreferences: true)` + `IOSOptions(accessibility: first_unlock)` |
+| **Backoff exponencial** | `sync_queue.dart` | Itens falhos são promovidos de volta a `pending` somente após `2^attempts` minutos (teto 60 min). Após 5 falhas são quarentenados |
+| **Captura de fotos real** | `photo_capture_service.dart` | Wrapper sobre `image_picker` — `fromCamera()` / `fromGallery()` com redimensionamento 1920px e qualidade JPEG 85% |
+| **Conflict → aplica server_payload** | `sync_service.dart` | Quando o servidor retorna `conflict`, o campo `server_payload` é aplicado diretamente às tabelas locais antes de descartar o item da fila |
+| **Tela de diagnóstico** | `sync_diagnostics_screen.dart` | Itens quarentenados com backoff restante + histórico das últimas 30 sessões de sync + botão retry |
+| **Pull reconciliation** | `sync_service.dart` | Pull trata `collection_point` (GPS + status) e `collection_record` (marca ponto como done) além de campanhas |
+| **Banner de falhas no home** | `home_screen.dart` | Banner vermelho quando `failedCount > 0`, com botão "Tentar" e atalho para `/sync-diagnostics` |
+
+## 9. Próximos passos sugeridos (em ordem de ROI)
+
+1. **Estruturar clima, checklist POP e cadeia de custódia** na UI e
+   pipeline de payload — os mappers já têm placeholders `null`.
+2. **Integrar `PhotoCaptureService` no `collect_screen`** — chamar
+   `fromCamera()` no botão de foto e passar o resultado para
+   `EvidenceUploader.uploadAndRegister()`.
+3. **Adicionar `local_auth`** para biometria antes de destravar o app.
+4. **Testes de integração** contra um backend mockado (dockerizar o
+   backend NestJS para ter ambiente reproduzível).
+5. **Implementar fila de revisão de conflitos** como tela admin.
 
 ---
 

@@ -208,6 +208,17 @@ class ProfileScreen extends StatelessWidget {
             ),
           ]),
 
+          // Diagnostics
+          _SettingsGroup(title: 'Diagnóstico', rows: [
+            _SettingRow(
+              icon: Icons.sync_outlined,
+              iconBg: const Color(0x141A8A8A),
+              iconColor: AppColors.teal,
+              label: 'Histórico de sincronização',
+              onTap: () => Navigator.pushNamed(context, '/sync-diagnostics'),
+            ),
+          ]),
+
           // Session settings
           _SettingsGroup(title: 'Sessão', rows: [
             _SettingRow(

@@ -1,11 +1,24 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:convert';
+
+import 'package:geolocator/geolocator.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 import '../app_state.dart';
+import '../database/database_helper.dart';
 import '../models.dart';
 import '../providers/collect_provider.dart';
 import '../stabilization/stabilization_config.dart';
 import '../stabilization/stabilization_models.dart';
 import '../stabilization/stabilization_service.dart';
+import '../sync/evidence_uploader.dart';
+import '../sync/photo_capture_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import 'finish_screen.dart';
@@ -24,7 +37,7 @@ class CollectScreen extends StatefulWidget {
 class _CollectScreenState extends State<CollectScreen> {
   final List<bool>   _checklistItems  = List.filled(4, false);
   final List<String> _climateSelected = [];
-  final List<bool>   _photoCaptured   = List.filled(3, false);
+  final List<String?> _capturedPhotoPaths = List.filled(3, null);
   final List<String> _obsTagsSelected = [];
   final _obsController = TextEditingController();
 
@@ -81,16 +94,106 @@ class _CollectScreenState extends State<CollectScreen> {
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
 
-  void _captureGps() async {
+  bool _isPhotoCaptured(int i) => _capturedPhotoPaths[i] != null;
+
+  Future<void> _capturePhoto(int i) async {
+    final choice = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.camera_alt_outlined),
+            title: const Text('Câmera'),
+            onTap: () => Navigator.pop(context, ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Galeria'),
+            onTap: () => Navigator.pop(context, ImageSource.gallery),
+          ),
+        ]),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    final photo = choice == ImageSource.camera
+        ? await PhotoCaptureService.instance.fromCamera()
+        : await PhotoCaptureService.instance.fromGallery();
+
+    if (photo == null || !mounted) return;
+    setState(() => _capturedPhotoPaths[i] = photo.path);
+  }
+
+  Future<void> _uploadCapturedPhotos(AppState state, int idx) async {
+    final campId = state.activeCampaignId;
+    if (campId == null) return;
+    final point = state.points[idx];
+
+    final ids = await DatabaseHelper.instance.ensurePointExternalIds(
+      campId, point.code, () => const Uuid().v4(),
+    );
+    final pointRow = await DatabaseHelper.instance.getPointRaw(campId, point.code);
+    final fieldPointId = pointRow?['id'] as int?;
+
+    for (int i = 0; i < _capturedPhotoPaths.length; i++) {
+      final path = _capturedPhotoPaths[i];
+      if (path == null) continue;
+      try {
+        await EvidenceUploader.instance.uploadAndRegister(
+          localPath:        path,
+          externalId:       const Uuid().v4(),
+          recordExternalId: ids.recordExternalId,
+          pointExternalId:  ids.pointExternalId,
+          fieldPointId:     fieldPointId,
+          capturedAt:       DateTime.now(),
+          caption:          _photoLabels[i],
+        );
+      } catch (_) {
+        // Evidence row is registered locally as 'pending'; will retry when online.
+      }
+    }
+  }
+
+  Future<void> _captureGps() async {
+    if (kIsWeb) {
+      showToast(context, '⚠ GPS não disponível nesta plataforma');
+      return;
+    }
     setState(() => _gpsCapturing = true);
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    setState(() {
-      _gpsCapturing = false;
-      _gpsCaptured  = true;
-      _gpsLat = '-23.4872';
-      _gpsLng = '-46.8321';
-    });
+    try {
+      // Check / request permission.
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          showToast(context, '⚠ Permissão de localização negada');
+        }
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _gpsCaptured = true;
+        _gpsLat = pos.latitude.toStringAsFixed(6);
+        _gpsLng = pos.longitude.toStringAsFixed(6);
+      });
+    } on LocationServiceDisabledException {
+      if (mounted) showToast(context, '⚠ Ative o GPS do dispositivo');
+    } catch (e) {
+      if (mounted) showToast(context, '⚠ Erro ao capturar GPS: $e');
+    } finally {
+      if (mounted) setState(() => _gpsCapturing = false);
+    }
   }
 
   // ── SAVE FLOW ───────────────────────────────────────────────────────────────
@@ -129,6 +232,27 @@ class _CollectScreenState extends State<CollectScreen> {
 
     await state.markPointDone(idx);
     if (_gpsCaptured) await state.setPointGps(idx, _gpsLat, _gpsLng);
+
+    // Persist collection metadata (weather, checklist POP, observations).
+    final campId = state.activeCampaignId;
+    final point  = state.points[idx];
+    if (campId != null) {
+      await DatabaseHelper.instance.saveCollectionMeta(
+        campaignId:            campId,
+        pointCode:             point.code,
+        weatherConditionsJson: jsonEncode(_climateSelected),
+        checklistPopJson:      jsonEncode(List.generate(
+          _checklistLabels.length,
+          (i) => {'label': _checklistLabels[i], 'checked': _checklistItems[i]},
+        )),
+        obsTagsJson:      jsonEncode(_obsTagsSelected),
+        observationsText: _obsController.text.trim(),
+      );
+    }
+
+    // Upload captured photos in background — failures are stored locally and
+    // retried automatically by EvidenceUploader.retryFailedUploads().
+    unawaited(_uploadCapturedPhotos(state, idx));
 
     if (!mounted) return;
     Navigator.pop(context);
@@ -348,23 +472,39 @@ class _CollectScreenState extends State<CollectScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
             child: Row(children: List.generate(3, (i) => Expanded(child: GestureDetector(
-              onTap: () => setState(() => _photoCaptured[i] = true),
+              onTap: () => _capturePhoto(i),
               child: Container(
                 margin: EdgeInsets.only(right: i < 2 ? 8 : 0),
                 height: 90,
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  color: _photoCaptured[i] ? AppColors.tealLt : AppColors.surf,
+                  color: _isPhotoCaptured(i) ? AppColors.tealLt : AppColors.surf,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _photoCaptured[i] ? const Color(0x591A8A8A) : AppColors.line, width: 1.5),
+                  border: Border.all(
+                      color: _isPhotoCaptured(i) ? const Color(0x591A8A8A) : AppColors.line,
+                      width: 1.5),
                 ),
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(_photoCaptured[i] ? Icons.check_circle_outline : Icons.camera_alt_outlined,
-                      size: 22, color: _photoCaptured[i] ? AppColors.teal : AppColors.sub2),
-                  const SizedBox(height: 4),
-                  Text(_photoLabels[i],
-                      style: TextStyle(fontSize: 9, color: _photoCaptured[i] ? AppColors.teal : AppColors.sub, fontWeight: FontWeight.w600),
-                      textAlign: TextAlign.center),
-                ]),
+                child: _isPhotoCaptured(i)
+                    ? Stack(fit: StackFit.expand, children: [
+                        Image.file(File(_capturedPhotoPaths[i]!), fit: BoxFit.cover),
+                        Positioned(
+                          bottom: 0, left: 0, right: 0,
+                          child: Container(
+                            color: const Color(0x881A8A8A),
+                            padding: const EdgeInsets.symmetric(vertical: 3),
+                            child: Text(_photoLabels[i],
+                                style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.w600),
+                                textAlign: TextAlign.center),
+                          ),
+                        ),
+                      ])
+                    : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Icon(Icons.camera_alt_outlined, size: 22, color: AppColors.sub2),
+                        const SizedBox(height: 4),
+                        Text(_photoLabels[i],
+                            style: const TextStyle(fontSize: 9, color: AppColors.sub, fontWeight: FontWeight.w600),
+                            textAlign: TextAlign.center),
+                      ]),
               ),
             )))),
           ),
