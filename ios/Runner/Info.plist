@@ -26,6 +26,21 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+
+	<!-- ── Camera / photo evidence ──────────────────────────────────────── -->
+	<key>NSCameraUsageDescription</key>
+	<string>O EcoFlowApp usa a câmera para registrar evidências fotográficas dos pontos de coleta ambiental.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O EcoFlowApp acessa a galeria para anexar fotos existentes como evidências de coleta.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>O EcoFlowApp salva as fotos capturadas em campo na sua galeria como backup local.</string>
+
+	<!-- ── GPS / field location ─────────────────────────────────────────── -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>O EcoFlowApp usa a localização para registrar as coordenadas GPS dos pontos de coleta ambiental.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>O EcoFlowApp usa a localização em campo para registrar coordenadas precisas dos pontos de monitoramento.</string>
+
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
