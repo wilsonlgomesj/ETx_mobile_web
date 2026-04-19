@@ -10,6 +10,7 @@ import '../api/api_exceptions.dart';
 import '../api/auth_service.dart';
 import '../api/sync_mappers.dart';
 import '../database/database_helper.dart';
+import 'evidence_uploader.dart';
 import 'sync_queue.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,6 +122,8 @@ class SyncService {
     if (!AuthService.instance.isAuthenticated) return;
     await pushPending();
     await pullUpdates();
+    // Retry evidence photos that were queued while offline.
+    unawaited(EvidenceUploader.instance.retryFailedUploads());
   }
 
   /// Drain the sync queue in batches of ApiConfig.maxBatchItems.

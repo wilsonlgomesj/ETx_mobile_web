@@ -156,14 +156,35 @@ class EvidenceUploader {
     );
   }
 
-  /// Retries failed uploads (e.g., after connectivity recovery).
+  /// Retries stalled uploads: items in 'failed' state AND items stuck in
+  /// 'pending' (upload aborted before step 2 — typically because the device
+  /// was offline when the technician took the photo).
+  ///
+  /// Respects the same 5-attempt cap as SyncQueue.
   Future<void> retryFailedUploads() async {
     final db = await DatabaseHelper.instance.database;
+
+    // Mark stale 'pending' items (created > 30 s ago, attempts == 0) as
+    // 'failed' so they enter the same retry path below.
+    final staleThreshold = DateTime.now()
+        .subtract(const Duration(seconds: 30))
+        .toIso8601String();
+    await db.rawUpdate(
+      '''
+      UPDATE ${DatabaseHelper.tEvidences}
+      SET upload_status = 'failed', last_error = 'upload_not_started',
+          updated_at = ?
+      WHERE upload_status = 'pending' AND attempts = 0 AND created_at < ?
+      ''',
+      [DateTime.now().toIso8601String(), staleThreshold],
+    );
+
     final rows = await db.query(
       DatabaseHelper.tEvidences,
-      where: "upload_status = ? AND attempts < ?",
-      whereArgs: ['failed', 5],
+      where: "upload_status = 'failed' AND attempts < 5",
+      orderBy: 'created_at ASC',
     );
+
     for (final r in rows) {
       final path = r['local_file_path'] as String?;
       if (path == null || !File(path).existsSync()) continue;
@@ -171,8 +192,8 @@ class EvidenceUploader {
         await uploadAndRegister(
           localPath:        path,
           externalId:       r['external_id'] as String,
-          recordExternalId: r['record_external_id'] as String,
-          pointExternalId:  r['record_external_id'] as String, // best-effort
+          recordExternalId: r['record_external_id'] as String? ?? '',
+          pointExternalId:  r['record_external_id'] as String? ?? '',
           fieldPointId:     r['field_point_id'] as int?,
           capturedAt: r['captured_at'] != null
               ? DateTime.parse(r['captured_at'] as String)
