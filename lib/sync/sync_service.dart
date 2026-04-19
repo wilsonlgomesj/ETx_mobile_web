@@ -318,9 +318,13 @@ class SyncService {
             break;
           case 'conflict':
             conflict++;
-            // Conflict: server kept its version — accept server state and drop
-            // this queue item. In a hardening pass we'd update local rows from
-            // r['server_payload'] or trigger a pull.
+            // Server won the conflict. Apply server_payload to the local row
+            // so the device reflects authoritative state, then drop the queue item.
+            final serverPayload = r['server_payload'] as Map<String, dynamic>?;
+            if (serverPayload != null) {
+              await _applyConflictServerPayload(item, serverPayload,
+                  serverVersion: r['server_version'] as int? ?? 1);
+            }
             await SyncQueue.instance.markProcessed(item.id!);
             break;
           case 'failed':
@@ -393,6 +397,54 @@ class SyncService {
       case SyncEntity.collectionEvidence:
         // evidence local bookkeeping is handled by EvidenceUploader.
         break;
+    }
+  }
+
+  /// Applies the server's authoritative payload to the local SQLite row after
+  /// a conflict. Server-version-wins is the policy; the queue item is dropped
+  /// so the stale client change is not re-sent.
+  Future<void> _applyConflictServerPayload(
+    SyncQueueItem item,
+    Map<String, dynamic> serverPayload, {
+    required int serverVersion,
+  }) async {
+    switch (item.entity) {
+      case SyncEntity.mobileCampaign:
+        final localId = item.localId;
+        if (localId == null) break;
+        final db = await DatabaseHelper.instance.database;
+        final patch = <String, dynamic>{
+          'dirty': 0,
+          'server_version': serverVersion,
+          'last_synced_at': DateTime.now().toIso8601String(),
+        };
+        if (serverPayload['status']   != null) patch['status']   = serverPayload['status'];
+        if (serverPayload['name']     != null) patch['name']     = serverPayload['name'];
+        if (serverPayload['deadline'] != null) patch['deadline'] = serverPayload['deadline'];
+        await db.update(DatabaseHelper.tCampaigns, patch,
+            where: 'id = ?', whereArgs: [localId]);
+        break;
+
+      case SyncEntity.collectionPoint:
+      case SyncEntity.collectionRecord:
+        final localId = item.localId;
+        if (localId == null) break;
+        final parts = localId.split('::');
+        if (parts.length < 2) break;
+        final db = await DatabaseHelper.instance.database;
+        final patch = <String, dynamic>{
+          'dirty': 0,
+          'server_version': serverVersion,
+          'last_synced_at': DateTime.now().toIso8601String(),
+        };
+        if (serverPayload['status'] != null) patch['status'] = serverPayload['status'];
+        await db.update(DatabaseHelper.tFieldPoints, patch,
+            where: 'campaignId = ? AND code = ?',
+            whereArgs: [parts[0], parts[1]]);
+        break;
+
+      case SyncEntity.collectionEvidence:
+        break; // Evidence conflicts are rare; just drop and let server state stand.
     }
   }
 
