@@ -599,6 +599,29 @@ class DatabaseHelper {
   }
 
   // ─────────────────────────────────────────────
+  // SYNC LOG — leitura para tela de diagnósticos
+  // ─────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getRecentSyncLogs({int limit = 30}) async {
+    final db = await database;
+    return db.query(
+      tSyncLog,
+      orderBy: 'started_at DESC',
+      limit: limit,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getFailedQueueItems({int limit = 50}) async {
+    final db = await database;
+    return db.query(
+      tSyncQueue,
+      where: "status = 'failed'",
+      orderBy: 'updated_at DESC',
+      limit: limit,
+    );
+  }
+
+  // ─────────────────────────────────────────────
   Future<void> resetDatabase() async {
     final path = join(await getDatabasesPath(), _dbName);
     await deleteDatabase(path);

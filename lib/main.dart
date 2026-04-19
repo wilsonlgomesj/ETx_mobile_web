@@ -11,6 +11,7 @@ import 'screens/reports_screen.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/sync_diagnostics_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,7 +48,8 @@ class EcoFlowApp extends StatelessWidget {
         '/reports':   (_) => const ReportsScreen(),
         '/calendar':  (_) => const CalendarScreen(),
         '/profile':   (_) => const ProfileScreen(),
-        '/login':     (_) => const LoginScreen(),
+        '/login':        (_) => const LoginScreen(),
+        '/sync-diagnostics': (_) => const SyncDiagnosticsScreen(),
       },
     );
   }
