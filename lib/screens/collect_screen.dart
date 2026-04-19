@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:convert';
+
 import 'package:geolocator/geolocator.dart';
 
 import 'package:flutter/material.dart';
@@ -230,6 +232,23 @@ class _CollectScreenState extends State<CollectScreen> {
 
     await state.markPointDone(idx);
     if (_gpsCaptured) await state.setPointGps(idx, _gpsLat, _gpsLng);
+
+    // Persist collection metadata (weather, checklist POP, observations).
+    final campId = state.activeCampaignId;
+    final point  = state.points[idx];
+    if (campId != null) {
+      await DatabaseHelper.instance.saveCollectionMeta(
+        campaignId:            campId,
+        pointCode:             point.code,
+        weatherConditionsJson: jsonEncode(_climateSelected),
+        checklistPopJson:      jsonEncode(List.generate(
+          _checklistLabels.length,
+          (i) => {'label': _checklistLabels[i], 'checked': _checklistItems[i]},
+        )),
+        obsTagsJson:      jsonEncode(_obsTagsSelected),
+        observationsText: _obsController.text.trim(),
+      );
+    }
 
     // Upload captured photos in background — failures are stored locally and
     // retried automatically by EvidenceUploader.retryFailedUploads().
