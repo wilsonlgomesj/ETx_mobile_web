@@ -21,6 +21,7 @@ dependencies:
   crypto: ^3.0.3               # SHA-256 for payload idempotency hash
   connectivity_plus: ^6.0.3    # online/offline detection for sync
   image_picker: ^1.1.2         # camera / gallery access for photo evidence
+  geolocator: ^13.0.2          # GPS coordinates for field points
 
 dev_dependencies:
   flutter_test:

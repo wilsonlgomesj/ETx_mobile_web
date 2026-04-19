@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:geolocator/geolocator.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -149,16 +151,42 @@ class _CollectScreenState extends State<CollectScreen> {
     }
   }
 
-  void _captureGps() async {
+  Future<void> _captureGps() async {
     setState(() => _gpsCapturing = true);
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    setState(() {
-      _gpsCapturing = false;
-      _gpsCaptured  = true;
-      _gpsLat = '-23.4872';
-      _gpsLng = '-46.8321';
-    });
+    try {
+      // Check / request permission.
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          showToast(context, '⚠ Permissão de localização negada');
+        }
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _gpsCaptured = true;
+        _gpsLat = pos.latitude.toStringAsFixed(6);
+        _gpsLng = pos.longitude.toStringAsFixed(6);
+      });
+    } on LocationServiceDisabledException {
+      if (mounted) showToast(context, '⚠ Ative o GPS do dispositivo');
+    } catch (e) {
+      if (mounted) showToast(context, '⚠ Erro ao capturar GPS: $e');
+    } finally {
+      if (mounted) setState(() => _gpsCapturing = false);
+    }
   }
 
   // ── SAVE FLOW ───────────────────────────────────────────────────────────────
